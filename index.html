@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Sonicod Pointage</title>
+<meta charset="utf-8">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f4f4f5;color:#18181b}
+  header{background:#E30613;color:#fff;padding:18px 20px 22px;text-align:center}
+  header .logo{font-weight:900;font-size:22px;letter-spacing:1px}
+  header .ag{opacity:.9;font-size:15px;margin-top:4px}
+  main{padding:18px;max-width:460px;margin:0 auto}
+  .card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:14px}
+  h2{margin:0 0 6px;font-size:20px}
+  p{margin:6px 0;color:#52525b;line-height:1.45}
+  .btn{display:block;width:100%;border:0;border-radius:14px;padding:18px;font-size:19px;font-weight:800;color:#fff;background:#E30613;margin-top:14px}
+  .btn.green{background:#16a34a}.btn.dark{background:#27272a}
+  .btn:disabled{opacity:.55}
+  input,select{width:100%;padding:14px;border:1.5px solid #d4d4d8;border-radius:12px;font-size:17px;margin-top:10px;background:#fff}
+  .list{max-height:260px;overflow:auto;margin-top:10px;border:1.5px solid #e4e4e7;border-radius:12px}
+  .item{padding:13px 14px;border-bottom:1px solid #f0f0f0;font-size:16px;display:flex;justify-content:space-between}
+  .item small{color:#a1a1aa}
+  .item.sel{background:#fee2e2;font-weight:700}
+  .big{font-size:64px;text-align:center;line-height:1}
+  .res{text-align:center}
+  .res h1{margin:10px 0 2px;font-size:30px}
+  .res .time{font-size:46px;font-weight:900;margin:6px 0}
+  .ok{color:#16a34a}.out{color:#2563eb}.warn{color:#ea580c}.err{color:#dc2626}
+  .today{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:#f4f4f5;border-radius:20px;padding:6px 12px;font-size:14px}
+  .spin{width:42px;height:42px;border:4px solid #fecaca;border-top-color:#E30613;border-radius:50%;animation:s 1s linear infinite;margin:30px auto}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header><div class="logo">SONICOD</div><div class="ag" id="ag">📍 Agence Agadir Tilila</div></header>
+<main id="app"><div class="spin"></div></main>
+
+<script>
+const API_ID = (new URLSearchParams(location.search).get('s') || '').replace(/[^A-Za-z0-9_-]/g, '');
+const API_URL = 'https://script.google.com/macros/s/' + API_ID + '/exec';
+const CODE = (new URLSearchParams(location.search).get('a') || '').replace(/[^A-Za-z0-9-]/g, '');
+const $app = document.getElementById('app');
+let INFO = null, selNom = null;
+
+function token(){
+  let t = null;
+  try { t = localStorage.getItem('sonicod_pt_token'); } catch(e){}
+  if (!t) {
+    t = 'T' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+    try { localStorage.setItem('sonicod_pt_token', t); } catch(e){}
+  }
+  return t;
+}
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function call(fn){
+  const args = Array.prototype.slice.call(arguments, 1);
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+    .then(r => r.json()).then(j => { if (j.err) throw new Error(j.err); return j.r; });
+}
+function spin(){ $app.innerHTML = '<div class="spin"></div>'; }
+function fail(msg, retry){
+  $app.innerHTML = '<div class="card res"><div class="big">⚠️</div><h2 class="err" style="margin-top:12px">' + esc(msg) + '</h2>' +
+    '<button class="btn dark" onclick="' + (retry || 'start()') + '">3awd</button></div>';
+}
+
+async function start(){
+  if (!CODE || (typeof API_ID !== 'undefined' && !API_ID)) {
+    $app.innerHTML = '<div class="card res"><div class="big">📷</div><h2 style="margin-top:12px">Scanni QR dyal lagence</h2>' +
+      '<p>7ell camera dyal telephone o scanni l QR li m3l9 f lagence.</p></div>';
+    return;
+  }
+  spin();
+  try { INFO = await call('initScan', CODE, token()); } catch(e){ return fail('Mochkil f connexion. 3awd.'); }
+  if (!INFO.ok) return fail(INFO.msg);
+  
+  if (INFO.me) showMe(); else showLink();
+}
+
+function showMe(){
+  const me = INFO.me;
+  if (me.deja) return showDone({ nom: me.nom, heure: me.deja, deja: true });
+  $app.innerHTML = '<div class="card"><p>Salam 👋</p><h2>' + esc(me.nom) + '</h2>' +
+    '<button class="btn green" id="go" onclick="doPoint()">✅ Ana jit — Sjjel</button>' +
+    (INFO.gps ? '<p style="font-size:13px;margin-top:12px">📍 Ila tlb mnk l position, 9bel (Autoriser).</p>' : '') +
+    '</div>';
+  doPoint();
+}
+
+function showLink(){
+  const blocked = INFO.blocked ? '<p class="err">Compte dyalk m7bous. Tsl b l admin.</p>' : '';
+  $app.innerHTML = '<div class="card"><h2>Awel merra 👋</h2>' +
+    '<p>Khtar smiytek o dkhel l PIN li 3tak l admin. Ghir merra wa7da f had telephone.</p>' + blocked +
+    '<input id="q" placeholder="🔎 9leb 3la smiytek" oninput="renderList()">' +
+    '<div class="list" id="list"></div>' +
+    '<input id="pin" type="tel" inputmode="numeric" maxlength="6" placeholder="PIN (4 ar9am)">' +
+    '<button class="btn" id="lk" onclick="doLink()">Rbet telephone dyali</button></div>';
+  renderList();
+}
+function renderList(){
+  const q = (document.getElementById('q').value || '').toLowerCase();
+  const items = INFO.drari.filter(n => n.toLowerCase().indexOf(q) >= 0);
+  document.getElementById('list').innerHTML = items.length ? items.map(n =>
+    '<div class="item' + (n === selNom ? ' sel' : '') + '" data-n="' + esc(n) + '" onclick="pick(this)">' +
+    '<span>' + esc(n) + '</span></div>').join('')
+    : '<div class="item"><small>Ma kayn 7ta wa7ed. Gol l admin yzidek.</small></div>';
+}
+function pick(el){ selNom = el.getAttribute('data-n'); renderList(); document.getElementById('pin').focus(); }
+
+async function doLink(){
+  const pin = document.getElementById('pin').value.trim();
+  if (!selNom) return alertBox('Khtar smiytek men la liste.');
+  if (!pin) return alertBox('Dkhel l PIN.');
+  const b = document.getElementById('lk'); b.disabled = true; b.textContent = '...';
+  try {
+    const r = await call('linkDevice', CODE, selNom, pin, token());
+    if (!r.ok) { b.disabled = false; b.textContent = 'Rbet telephone dyali'; return alertBox(r.msg); }
+    start();
+  } catch(e){ b.disabled = false; b.textContent = 'Rbet telephone dyali'; alertBox('Mochkil f connexion.'); }
+}
+function alertBox(m){
+  let el = document.getElementById('msg');
+  if (!el) { el = document.createElement('p'); el.id = 'msg'; el.className = 'err'; el.style.fontWeight = '700'; document.querySelector('.card').appendChild(el); }
+  el.textContent = m;
+}
+
+function getPos(){
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
+      () => res(null), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+  });
+}
+
+async function doPoint(){
+  const b = document.getElementById('go'); b.disabled = true; b.textContent = INFO.gps ? '📍 Kanchouf l position...' : '...';
+  const geo = INFO.gps ? await getPos() : await Promise.race([getPos(), new Promise(r => setTimeout(() => r(null), 4000))]);
+  b.textContent = '...';
+  let r;
+  try { r = await call('pointer', CODE, token(), geo); } catch(e){ return fail('Mochkil f connexion. 3awd.', 'start()'); }
+  if (!r.ok) { if (r.relink) { try{localStorage.removeItem('sonicod_pt_token');}catch(e){} } return fail(r.msg, 'start()'); }
+  showDone(r);
+}
+
+function showDone(r){
+  let extra = '';
+  if (r.deja) extra = '<p class="ok" style="font-weight:700">Deja tsjjelti lyoum ✔️</p>';
+  else if (Number(r.retard) > 0) extra = '<p class="warn" style="font-weight:700">⏰ Retard ' + r.retard + ' d9i9a</p>';
+  else extra = '<p class="ok" style="font-weight:700">F lwe9t 👏</p>';
+  $app.innerHTML = '<div class="card res"><div class="big">✅</div>' +
+    '<h1 class="ok">' + (r.deja ? 'MSJJEL' : 'MR7BA') + '</h1>' +
+    '<p style="margin-top:8px">Jiti m3a</p><div class="time">' + esc(r.heure) + '</div>' +
+    '<p><b>' + esc(r.nom) + '</b></p>' + extra +
+    '<p style="font-size:13px;margin-top:16px">Nhar mbrouk 💪</p></div>';
+}
+
+start();
+</script>
+</body>
+</html>
