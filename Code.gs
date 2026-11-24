@@ -407,7 +407,7 @@ function showMe(){
   if (me.deja) return showDone({ nom: me.nom, heure: me.deja, deja: true });
   $app.innerHTML = '<div class="card"><p>Salam 👋</p><h2>' + esc(me.nom) + '</h2>' +
     '<button class="btn green" id="go" onclick="doPoint()">✅ Ana jit — Sjjel</button>' +
-    (INFO.gps ? '<p style="font-size:13px;margin-top:12px">📍 Ila tlb mnk l position, 9bel (Autoriser).</p>' : '') +
+    '<p style="font-size:13px;margin-top:12px">📍 Ila tlb mnk l position, dghet <b>Autoriser</b> (darouri).</p>' +
     '</div>';
   doPoint();
 }
@@ -454,18 +454,36 @@ function getPos(){
     if (!navigator.geolocation) return res(null);
     navigator.geolocation.getCurrentPosition(
       p => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
-      () => res(null), { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+      e => res({ err: e && e.code === 1 ? 'denied' : 'off' }), { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
   });
 }
 
 async function doPoint(){
-  const b = document.getElementById('go'); b.disabled = true; b.textContent = INFO.gps ? '📍 Kanchouf l position...' : '...';
-  const geo = INFO.gps ? await getPos() : await Promise.race([getPos(), new Promise(r => setTimeout(() => r(null), 4000))]);
+  const b = document.getElementById('go'); b.disabled = true; b.textContent = '📍 Kanchouf l position...';
+  const geo = await getPos();
+  if (!geo || geo.err) return gpsBlock(geo && geo.err);
   b.textContent = '...';
   let r;
   try { r = await call('pointer', CODE, token(), geo); } catch(e){ return fail('Mochkil f connexion. 3awd.', 'start()'); }
   if (!r.ok) { if (r.relink) { try{localStorage.removeItem('sonicod_pt_token');}catch(e){} } return fail(r.msg, 'start()'); }
   showDone(r);
+}
+
+function gpsBlock(why){
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const steps = ios
+    ? '<ol style="text-align:left;line-height:1.7;padding-left:20px;margin:10px 0">' +
+      '<li><b>Réglages</b> → <b>Confidentialité et sécurité</b> → <b>Service de localisation</b> → <b>Activé</b></li>' +
+      '<li>Nzel l <b>Safari</b> (wla <b>Chrome</b>) → <b>Lorsque l\\'app est active</b></li>' +
+      '<li>Rje3 hna o dghet <b>3awd</b> → <b>Autoriser</b></li></ol>'
+    : '<ol style="text-align:left;line-height:1.7;padding-left:20px;margin:10px 0">' +
+      '<li>Hbet men lfo9 o che3el <b>Localisation 📍</b></li>' +
+      '<li>F Chrome: 7da l lien lfo9 dghet <b>🔒</b> → <b>Autorisations</b> → <b>Position</b> → <b>Autoriser</b></li>' +
+      '<li>Rje3 hna o dghet <b>3awd</b></li></ol>';
+  $app.innerHTML = '<div class="card res"><div class="big">📍</div>' +
+    '<h2 class="err" style="margin-top:12px">Khassk tche3el l position</h2>' +
+    '<p>Bla position (GPS) <b>ma ytsjjelch</b> l7odor dyalk.' + (why === 'denied' ? ' Nta dghetti « Refuser ».' : '') + '</p>' +
+    steps + '<button class="btn" onclick="start()">🔄 3awd</button></div>';
 }
 
 function showDone(r){
